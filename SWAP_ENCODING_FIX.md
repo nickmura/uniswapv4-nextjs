@@ -1,13 +1,27 @@
 # Uniswap V4 Swap Encoding Fix
 
-**Date**: February 5, 2025
+**Date**: October 21, 2025 (Updated)
 **Issue**: Transactions failing on Mainnet with high gas estimates (~$107) indicating revert
+
+## **IMPORTANT: SDK Action Constants Are Actually CORRECT**
+
+✅ **The `@uniswap/v4-sdk` package has the CORRECT action constants!**
+
+```typescript
+// ✅ CORRECT - From v4-periphery/src/libraries/Actions.sol
+const V4_SWAP_EXACT_IN_SINGLE = 0x06;  // 6
+const V4_SWAP_EXACT_IN = 0x07;         // 7 (multi-hop)
+const V4_SETTLE_ALL = 0x0c;            // 12
+const V4_TAKE_ALL = 0x0f;              // 15
+```
+
+**The issue was NOT with the action constants - it was with parameter encoding!**
 
 ## Root Cause
 
 The swap transaction encoding was incorrect in three critical ways:
 
-1. **Wrong action constants** - Using incorrect values from wrong enum
+1. **Wrong action constants** - SDK has outdated/incorrect values (6, 12, 15 instead of 0, 9, 11)
 2. **Missing V4_SWAP wrapper** - Not wrapping V4 actions in Universal Router command
 3. **Incorrect parameter encoding** - Wrong structure for action parameters
 

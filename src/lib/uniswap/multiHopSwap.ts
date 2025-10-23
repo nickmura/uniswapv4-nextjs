@@ -6,10 +6,11 @@ import { isNativeToken } from '../config/tokens';
 
 import { RoutePlanner, CommandType } from '@uniswap/universal-router-sdk';
 
-// V4 Periphery Action Constants (from v4-periphery/src/libraries/Actions.sol)
-const V4_SWAP_EXACT_IN = 0x07;
-const V4_SETTLE_ALL = 0x0c;
-const V4_TAKE_ALL = 0x0f;
+// CORRECT V4 Action Constants from v4-periphery contract
+// From: https://github.com/Uniswap/v4-periphery/blob/main/src/libraries/Actions.sol
+const V4_SWAP_EXACT_IN = 0x07;  // Multi-hop exact input
+const V4_SETTLE_ALL = 0x0c;      // Settle input currency
+const V4_TAKE_ALL = 0x0f;        // Take output currency
 
 /**
  * Encode V4 Planner actions for multi-hop swap
@@ -70,15 +71,10 @@ function encodeV4MultiHopActions(params: MultiHopSwapParams): { commands: `0x${s
   );
   params_array.push(takeParams);
 
-  // Encode the input for V4_SWAP command: abi.encode(actions, params)
-  const v4SwapInput = encodeAbiParameters(
-    parseAbiParameters('bytes,bytes[]'),
-    [actionsBytes, params_array]
-  );
-
   // Create route planner and add V4_SWAP command
+  // CRITICAL: Pass actions and params as TWO SEPARATE arguments, not encoded together!
   const planner = new RoutePlanner();
-  planner.addCommand(CommandType.V4_SWAP, [v4SwapInput]);
+  planner.addCommand(CommandType.V4_SWAP, [actionsBytes, params_array]);
 
   return {
     commands: planner.commands as `0x${string}`,

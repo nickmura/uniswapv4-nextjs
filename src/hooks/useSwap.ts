@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { Token, SwapType } from '@/types/swap';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSendTransaction } from 'wagmi';
 import { Address } from 'viem';
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
+import { executeSingleHopSwap } from '@/lib/uniswap/swapSelector';
 import { executeMultiHopSwap } from '@/lib/uniswap/multiHopSwap';
 import { calculateDeadline } from '@/lib/utils/slippage';
 import { isNativeToken, getWETHAddress } from '@/lib/config/tokens';

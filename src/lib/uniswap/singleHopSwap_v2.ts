@@ -12,7 +12,8 @@ const V4_TAKE_ALL = 0x0f;
 // Universal Router Command
 const V4_SWAP = 0x10;
 
-// Special constant for using contract balance / open delta
+// Special constant for using contract balance / open delta 
+//@ts-ignore sybau
 const CONTRACT_BALANCE = 0x8000000000000000000000000000000000000000000000000000000000000000n;
 
 /**

@@ -1,5 +1,5 @@
 import { http, createConfig } from 'wagmi';
-import { mainnet, sepolia, base, arbitrum } from 'wagmi/chains';
+import { mainnet, sepolia, base, arbitrum, optimism } from 'wagmi/chains';
 import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 
 // Get WalletConnect project ID from environment
@@ -7,7 +7,7 @@ const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID 
 
 // Configure wagmi
 export const config = createConfig({
-  chains: [mainnet, sepolia, base, arbitrum],
+  chains: [mainnet, sepolia, base, arbitrum, optimism],
   connectors: [
     injected({ shimDisconnect: true }),
     walletConnect({
@@ -36,12 +36,16 @@ export const config = createConfig({
       process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ||
       'https://arb1.arbitrum.io/rpc'
     ),
+    [optimism.id]: http(
+      process.env.NEXT_PUBLIC_OPTIMISM_RPC_URL ||
+      'https://mainnet.optimism.io'
+    ),
   },
   ssr: true,
 });
 
 // Export chain information for easy access
-export const supportedChains = [mainnet, sepolia, base, arbitrum];
+export const supportedChains = [mainnet, sepolia, base, arbitrum, optimism];
 
 // Chain names mapping
 export const chainNames: Record<number, string> = {
@@ -49,6 +53,7 @@ export const chainNames: Record<number, string> = {
   [sepolia.id]: 'Sepolia',
   [base.id]: 'Base',
   [arbitrum.id]: 'Arbitrum',
+  [optimism.id]: 'Optimism',
 };
 
 // Check if chain is supported

@@ -116,6 +116,16 @@ export function SwapForm() {
   const networkWarning = chainId ? getNetworkWarning(chainId) : null;
   const networkStatus = chainId ? getNetworkStatus(chainId) : null;
 
+  const explorerBaseUrls: Record<number, string> = {
+    1: 'https://etherscan.io/tx/',
+    10: 'https://optimistic.etherscan.io/tx/',
+    11155111: 'https://sepolia.etherscan.io/tx/',
+    8453: 'https://basescan.org/tx/',
+    42161: 'https://arbiscan.io/tx/',
+  };
+
+  const explorerBaseUrl = explorerBaseUrls[chainId || 1] || explorerBaseUrls[1];
+
   // Check if swap is disabled
   const isSwapDisabled =
     !account ||
@@ -126,8 +136,7 @@ export function SwapForm() {
     isQuoteLoading ||
     isSwapLoading ||
     !!quoteError ||
-    !quote ||
-    networkStatus?.poolsAvailable === 'none'; // Disable on networks with no pools
+    !quote;
 
   return (
     <div className="w-full max-w-md mx-auto p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-xl">
@@ -147,7 +156,7 @@ export function SwapForm() {
               <div>{networkWarning}</div>
               {networkStatus?.poolsAvailable === 'none' && (
                 <div className="mt-2 font-medium">
-                  💡 Switch to Ethereum Mainnet for the best experience
+                  💡 Pools may be unavailable on this network. Double-check quotes before confirming.
                 </div>
               )}
             </div>
@@ -303,9 +312,7 @@ export function SwapForm() {
                 : 'bg-blue-500 hover:bg-blue-600 text-white'
             }`}
           >
-            {networkStatus?.poolsAvailable === 'none'
-              ? `Switch to Mainnet - No ${networkStatus.name} Pools`
-              : isSwapLoading
+            {isSwapLoading
               ? 'Swapping...'
               : isQuoteLoading
               ? 'Loading...'
@@ -320,7 +327,7 @@ export function SwapForm() {
           <div className="text-green-800 dark:text-green-200 text-sm">
             Transaction successful!{' '}
             <a
-              href={`https://etherscan.io/tx/${txHash}`}
+              href={`${explorerBaseUrl}${txHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="underline"

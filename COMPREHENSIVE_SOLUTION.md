@@ -30,8 +30,8 @@ I've created **5 different solution approaches** in separate files for you to te
 |------|---------|-------------|
 | `SOLUTION_APPROACHES.md` | Detailed explanation of all approaches | Understanding the problem |
 | `TESTING_GUIDE.md` | Step-by-step testing instructions | Running tests |
-| `singleHopSwap_v2.ts` | Approach 1 & 3 implementations | **Start here** |
-| `singleHopSwap_v3.ts` | Approach 4 & 5 implementations | If Approach 1 fails |
+| `singleHopSwap.ts` | Approach 1 & 3 implementations | **Start here** |
+| `singleHopSwap.ts (legacy variants removed)` | Approach 4 & 5 implementations | If Approach 1 fails |
 | `COMPREHENSIVE_SOLUTION.md` | This file - overview | Quick reference |
 
 ---
@@ -48,7 +48,7 @@ I've created **5 different solution approaches** in separate files for you to te
 import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 
 // NEW:
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v2';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 ```
 
 **Update the function call (line 162):**
@@ -94,13 +94,13 @@ tx = await executeSingleHopSwap({ /*...*/ }, true); // true = Approach 3
 
 **Approach 4 (SETTLE/TAKE):**
 ```typescript
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v3';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 tx = await executeSingleHopSwap({ /*...*/ }, 'settle-take');
 ```
 
 **Approach 5 (Simplified):**
 ```typescript
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v3';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 tx = await executeSingleHopSwap({ /*...*/ }, 'simplified');
 ```
 
@@ -110,7 +110,7 @@ tx = await executeSingleHopSwap({ /*...*/ }, 'simplified');
 
 ### Approach 1: Direct ABI Encoding ⭐ (Recommended)
 
-**File:** `singleHopSwap_v2.ts`
+**File:** `singleHopSwap.ts`
 **Function:** `executeSingleHopSwap(params, false)`
 
 **What it does:**
@@ -133,7 +133,7 @@ tx = await executeSingleHopSwap({ /*...*/ }, 'simplified');
 
 ### Approach 3: CONTRACT_BALANCE Flag
 
-**File:** `singleHopSwap_v2.ts`
+**File:** `singleHopSwap.ts`
 **Function:** `executeSingleHopSwap(params, true)`
 
 **What it does:**
@@ -154,7 +154,7 @@ tx = await executeSingleHopSwap({ /*...*/ }, 'simplified');
 
 ### Approach 4: SETTLE + TAKE (not *_ALL)
 
-**File:** `singleHopSwap_v3.ts`
+**File:** `singleHopSwap.ts (legacy variants removed)`
 **Function:** `executeSingleHopSwap(params, 'settle-take')`
 
 **What it does:**
@@ -176,7 +176,7 @@ tx = await executeSingleHopSwap({ /*...*/ }, 'simplified');
 
 ### Approach 5: Simplified Parameters
 
-**File:** `singleHopSwap_v3.ts`
+**File:** `singleHopSwap.ts (legacy variants removed)`
 **Function:** `executeSingleHopSwap(params, 'simplified')`
 
 **What it does:**
@@ -386,7 +386,7 @@ Once you find the working approach:
 
 1. **Update main file:**
    ```bash
-   cp src/lib/uniswap/singleHopSwap_v2.ts src/lib/uniswap/singleHopSwap.ts
+   cp src/lib/uniswap/singleHopSwap.ts src/lib/uniswap/singleHopSwap.ts
    ```
 
 2. **Apply to multi-hop:**

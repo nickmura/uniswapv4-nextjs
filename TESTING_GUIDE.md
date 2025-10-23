@@ -7,24 +7,23 @@ I've created **5 different implementation approaches** to solve your swap encodi
 ## Implementation Files Created
 
 1. **`singleHopSwap.ts`** (Original) - Using RoutePlanner SDK
-2. **`singleHopSwap_v2.ts`** - Direct ABI encoding + CONTRACT_BALANCE variant
-3. **`singleHopSwap_v3.ts`** - SETTLE/TAKE variants + Simplified encoding
+2. **`singleHopSwap.ts`** - Direct ABI encoding implementation (legacy v2/v3 files removed)
 
 ## Quick Reference Table
 
 | Approach | File | Function | Key Difference |
 |----------|------|----------|----------------|
 | Original | `singleHopSwap.ts` | `executeSingleHopSwap()` | RoutePlanner SDK |
-| Approach 1 | `singleHopSwap_v2.ts` | `executeSingleHopSwap(params, false)` | Direct encoding with explicit amounts |
-| Approach 3 | `singleHopSwap_v2.ts` | `executeSingleHopSwap(params, true)` | CONTRACT_BALANCE flag |
-| Approach 4 | `singleHopSwap_v3.ts` | `executeSingleHopSwap(params, 'settle-take')` | SETTLE + TAKE instead of *_ALL |
-| Approach 5 | `singleHopSwap_v3.ts` | `executeSingleHopSwap(params, 'simplified')` | Simplified params |
+| Approach 1 | `singleHopSwap.ts` | `executeSingleHopSwap(params, false)` | Direct encoding with explicit amounts |
+| Approach 3 | `singleHopSwap.ts` | `executeSingleHopSwap(params, true)` | CONTRACT_BALANCE flag |
+| Approach 4 | `singleHopSwap.ts (legacy variants removed)` | `executeSingleHopSwap(params, 'settle-take')` | SETTLE + TAKE instead of *_ALL |
+| Approach 5 | `singleHopSwap.ts (legacy variants removed)` | `executeSingleHopSwap(params, 'simplified')` | Simplified params |
 
 ## Recommended Testing Order
 
 ### Phase 1: Test Approach 1 (Most Likely to Work)
 
-**File:** `singleHopSwap_v2.ts`
+**File:** `singleHopSwap.ts`
 **Function:** `executeSingleHopSwap(params, false)`
 
 **Why test first:** This exactly matches the official Solidity examples from Uniswap docs.
@@ -32,7 +31,7 @@ I've created **5 different implementation approaches** to solve your swap encodi
 **How to test:**
 ```typescript
 // In useSwap.ts, change the import
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v2';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 
 // Call with useContractBalance = false
 tx = await executeSingleHopSwap({
@@ -58,14 +57,14 @@ tx = await executeSingleHopSwap({
 
 ### Phase 2: Test Approach 3 (If Approach 1 Fails)
 
-**File:** `singleHopSwap_v2.ts`
+**File:** `singleHopSwap.ts`
 **Function:** `executeSingleHopSwap(params, true)`
 
 **Why test:** Uses CONTRACT_BALANCE constant which is common in V4 contracts.
 
 **How to test:**
 ```typescript
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v2';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 
 tx = await executeSingleHopSwap({
   tokenIn,
@@ -80,14 +79,14 @@ tx = await executeSingleHopSwap({
 
 ### Phase 3: Test Approach 4 (If Previous Failed)
 
-**File:** `singleHopSwap_v3.ts`
+**File:** `singleHopSwap.ts (legacy variants removed)`
 **Function:** `executeSingleHopSwap(params, 'settle-take')`
 
 **Why test:** Some contracts prefer SETTLE/TAKE over SETTLE_ALL/TAKE_ALL.
 
 **How to test:**
 ```typescript
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v3';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 
 tx = await executeSingleHopSwap({
   tokenIn,
@@ -102,14 +101,14 @@ tx = await executeSingleHopSwap({
 
 ### Phase 4: Test Approach 5 (Last Resort)
 
-**File:** `singleHopSwap_v3.ts`
+**File:** `singleHopSwap.ts (legacy variants removed)`
 **Function:** `executeSingleHopSwap(params, 'simplified')`
 
 **Why test:** Tries minimal parameters for SETTLE_ALL/TAKE_ALL.
 
 **How to test:**
 ```typescript
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v3';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 
 tx = await executeSingleHopSwap({
   tokenIn,
@@ -130,9 +129,9 @@ Edit `src/hooks/useSwap.ts` directly:
 
 ```typescript
 // At the top, change the import
-import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v2';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 // OR
-// import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v3';
+// import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 
 // In the swap function, around line 162
 tx = await executeSingleHopSwap({

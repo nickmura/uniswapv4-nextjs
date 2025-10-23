@@ -8,7 +8,7 @@ A modern, fully-featured decentralized token swapping interface built with Unisw
 - **Multi-Hop Swaps**: Automatic routing through multiple pools for optimal pricing
 - **Real-time Quotes**: Instant quote fetching with price impact calculations
 - **Slippage Protection**: Configurable slippage tolerance with smart warnings
-- **Multiple Networks**: Support for Ethereum Mainnet, Sepolia, Base, and Arbitrum
+- **Multiple Networks**: Support for Ethereum Mainnet, Optimism, Base, Arbitrum, and Sepolia
 - **Modern Wallet Support**: RainbowKit integration with MetaMask, WalletConnect, Coinbase Wallet, and more
 - **Responsive UI**: Beautiful, mobile-friendly interface with dark mode support
 - **Type-Safe**: Full TypeScript implementation with strict type checking
@@ -24,16 +24,15 @@ A modern, fully-featured decentralized token swapping interface built with Unisw
 
 ## ⚠️ Important: Network Status
 
-**Uniswap V4 launched Jan 31, 2025. ONLY MAINNET WORKS:**
+**Uniswap V4 launched Jan 31, 2025. Liquidity is still rolling out:**
 
-- ✅ **Ethereum Mainnet** - Works! Use this network
-- ❌ **Base** - NO POOLS - Swap button disabled (will fail)
-- ❌ **Sepolia** - NO POOLS - Swap button disabled (will fail)
-- ⚠️ **Arbitrum** - Limited pools, low liquidity
+- ✅ **Ethereum Mainnet** – Best experience, deep liquidity.
+- ⚠️ **Optimism** – Growing liquidity; stay with majors like ETH/USDC.
+- ⚠️ **Base** – Limited pools; verify quotes before confirming.
+- ⚠️ **Arbitrum** – Liquidity is thin; expect slippage.
+- ❌ **Sepolia** – Contracts only, no public pools yet.
 
-**👉 MUST use Ethereum Mainnet. Other networks are disabled or won't work.**
-
-The app **prevents** swaps on Base/Sepolia with a clear warning and disabled button.
+The app surfaces network warnings but leaves the swap button available so you can test cautiously.
 
 See [QUICK_START.md](./QUICK_START.md) for detailed guidance.
 
@@ -99,6 +98,7 @@ pnpm dev
 
 Use the network selector in RainbowKit to switch between:
 - Ethereum Mainnet
+- Optimism
 - Sepolia Testnet (for testing)
 - Base
 - Arbitrum One
@@ -139,12 +139,13 @@ src/
 
 ## Supported Networks
 
-| Network | Chain ID | Testnet |
-|---------|----------|---------|
-| Ethereum | 1 | No |
-| Sepolia | 11155111 | Yes |
-| Base | 8453 | No |
-| Arbitrum | 42161 | No |
+| Network   | Chain ID | Testnet |
+|-----------|----------|---------|
+| Ethereum  | 1        | No      |
+| Optimism  | 10       | No      |
+| Base      | 8453     | No      |
+| Arbitrum  | 42161    | No      |
+| Sepolia   | 11155111 | Yes     |
 
 ## Development
 

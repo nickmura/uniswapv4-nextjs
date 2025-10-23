@@ -86,6 +86,52 @@ export const SEPOLIA_TOKENS: Record<string, Token> = {
   },
 };
 
+// Optimism Mainnet Tokens
+export const OPTIMISM_TOKENS: Record<string, Token> = {
+  ETH: {
+    address: NATIVE_ADDRESS,
+    decimals: 18,
+    symbol: 'ETH',
+    name: 'Ether',
+    chainId: 10,
+  },
+  WETH: {
+    address: '0x4200000000000000000000000000000000000006',
+    decimals: 18,
+    symbol: 'WETH',
+    name: 'Wrapped Ether',
+    chainId: 10,
+  },
+  USDC: {
+    address: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607',
+    decimals: 6,
+    symbol: 'USDC',
+    name: 'USD Coin',
+    chainId: 10,
+  },
+  USDT: {
+    address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
+    decimals: 6,
+    symbol: 'USDT',
+    name: 'Tether USD',
+    chainId: 10,
+  },
+  DAI: {
+    address: '0xda10009cBd5D07dd0CeCc66161FC93D7c9000da1',
+    decimals: 18,
+    symbol: 'DAI',
+    name: 'Dai Stablecoin',
+    chainId: 10,
+  },
+  OP: {
+    address: '0x4200000000000000000000000000000000000042',
+    decimals: 18,
+    symbol: 'OP',
+    name: 'Optimism',
+    chainId: 10,
+  },
+};
+
 // Base Mainnet Tokens
 export const BASE_TOKENS: Record<string, Token> = {
   ETH: {
@@ -185,6 +231,8 @@ export function getTokensByChainId(chainId: number): Record<string, Token> {
       return MAINNET_TOKENS;
     case 11155111:
       return SEPOLIA_TOKENS;
+    case 10:
+      return OPTIMISM_TOKENS;
     case 8453:
       return BASE_TOKENS;
     case 42161:

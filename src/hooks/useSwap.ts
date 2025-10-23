@@ -4,11 +4,11 @@ import { useState, useCallback } from 'react';
 import { Token, SwapType } from '@/types/swap';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSendTransaction } from 'wagmi';
 import { Address } from 'viem';
-import { executeSingleHopSwap } from '@/lib/uniswap/swapSelector';
+import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 import { executeMultiHopSwap } from '@/lib/uniswap/multiHopSwap';
 import { calculateDeadline } from '@/lib/utils/slippage';
 import { isNativeToken, getWETHAddress } from '@/lib/config/tokens';
-import { getPermit2Address, ERC20_ABI, UNIVERSAL_ROUTER_ABI } from '@/lib/config/contracts';
+import { getPermit2Address, getUniversalRouterAddress, ERC20_ABI, PERMIT2_ABI, UNIVERSAL_ROUTER_ABI } from '@/lib/config/contracts';
 
 interface UseSwapParams {
   tokenIn: Token | null;
@@ -67,7 +67,7 @@ export function useSwap() {
    * Approve token spending for Permit2
    */
   const approveToken = useCallback(
-    async (token: Token, amount: bigint) => {
+    async (token: Token, amount: bigint, chainId: number) => {
       if (!account) {
         throw new Error('Wallet not connected');
       }
@@ -78,18 +78,29 @@ export function useSwap() {
 
       try {
         const permit2Address = getPermit2Address(token.chainId);
+        const universalRouterAddress = getUniversalRouterAddress(chainId);
+        const maxPermitAmount = (1n << 160n) - 1n;
+        const expirationSeconds = BigInt(Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365); // ~1 year
 
         // Approve Permit2 to spend tokens
-        const hash = await writeContractAsync({
+        const approveTx = await writeContractAsync({
           address: token.address as Address,
           abi: ERC20_ABI,
           functionName: 'approve',
           args: [permit2Address, amount],
         });
 
-        // Wait for approval transaction
-        // In production, you'd wait for the transaction to be mined
-        console.log('Approval transaction sent:', hash);
+        console.log('ERC20 approval transaction sent:', approveTx);
+
+        // Approve Universal Router via Permit2
+        const permitTx = await writeContractAsync({
+          address: permit2Address,
+          abi: PERMIT2_ABI,
+          functionName: 'approve',
+          args: [token.address, universalRouterAddress, maxPermitAmount, expirationSeconds],
+        });
+
+        console.log('Permit2 approval transaction sent:', permitTx);
       } catch (error) {
         console.error('Error approving token:', error);
         throw error;
@@ -136,7 +147,7 @@ export function useSwap() {
           const hasApproval = await checkApproval(tokenIn, amountIn);
           if (!hasApproval) {
             // Request approval
-            await approveToken(tokenIn, amountIn);
+            await approveToken(tokenIn, amountIn, chainId);
             // Note: In production, you should wait for the approval transaction
             // to be confirmed before proceeding with the swap
           }

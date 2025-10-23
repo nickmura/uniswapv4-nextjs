@@ -35,8 +35,17 @@ export const NETWORK_STATUS: Record<number, NetworkStatus> = {
     chainId: 8453,
     name: 'Base',
     v4Deployed: true,
-    poolsAvailable: 'none', // Updated: Even ETH/USDC fails - no working pools
-    recommendation: 'V4 contracts deployed but NO pools available yet. Transaction will fail. Use Ethereum Mainnet instead.',
+    poolsAvailable: 'limited',
+    recommendation: 'V4 deployed with emerging liquidity. Stick to ETH majors and double-check quotes.',
+  },
+
+  // Optimism
+  10: {
+    chainId: 10,
+    name: 'Optimism',
+    v4Deployed: true,
+    poolsAvailable: 'limited',
+    recommendation: 'Liquidity is growing. Use popular pairs (ETH/USDC, ETH/USDT) and watch slippage.',
   },
 
   // Arbitrum One

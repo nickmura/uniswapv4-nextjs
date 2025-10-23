@@ -1,118 +1,34 @@
-# Quick Fix: 2-Minute Solution
+# Quick Fix: Working Single-Hop Swaps
 
-## TL;DR - Fastest Way to Test
+## TL;DR - What Changed
+- The app now uses the **direct ABI encoder** baked into `singleHopSwap.ts`.
+- Legacy selector files (`swapSelector.ts`, `singleHopSwap_v2.ts`, `singleHopSwap_v3.ts`) were removed.
+- Swap data is encoded once and sent straight to the Universal Router.
 
-**Option 1: Use the Selector (Easiest)**
-
-1. Edit `src/hooks/useSwap.ts` line 7:
+## 2-Step Smoke Test
+1. Verify `useSwap.ts` imports the helper directly:
    ```typescript
-   // Change from:
    import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
-
-   // To:
-   import { executeSingleHopSwap } from '@/lib/uniswap/swapSelector';
    ```
+2. Run a tiny swap (e.g. 0.001 ETH → USDC) on your target network.
 
-2. Edit `src/lib/uniswap/swapSelector.ts` line 29:
-   ```typescript
-   export const CURRENT_APPROACH: SwapApproach = 'approach-1'; // ⭐ START HERE
-   ```
+You should see:
+- Gas around 150k–200k
+- No MetaMask “likely to fail” banner
+- Successful transaction hash
 
-3. Save and test! Try your swap.
+If it reverts:
+- Double-check token addresses and fee tier
+- Confirm the network has liquidity for that pair
 
-4. If it doesn't work, change line 29 to:
-   ```typescript
-   export const CURRENT_APPROACH: SwapApproach = 'approach-3'; // Try next
-   ```
+## Network Setup Notes
+- **Optimism** is fully configured with the official January 2025 deployments.
+- Base, Mainnet, Arbitrum, and Sepolia also ship with baked-in addresses.
 
-**Option 2: Direct Implementation (Manual)**
-
-1. Edit `src/hooks/useSwap.ts` line 7:
-   ```typescript
-   import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap_v2';
-   ```
-
-2. Edit `src/hooks/useSwap.ts` line 162, add `false` parameter:
-   ```typescript
-   tx = await executeSingleHopSwap({
-     tokenIn,
-     tokenOut,
-     amountIn,
-     minAmountOut,
-     recipient: account,
-     deadline,
-     chainId,
-   }, false); // <-- Add this
-   ```
-
-3. Save and test!
-
----
-
-## What to Check
-
-✅ **Success signs:**
-- Gas estimate: 150k-200k
-- No MetaMask warnings
-- Transaction succeeds
-
-❌ **Failure signs:**
-- Gas estimate: >500k
-- "This transaction is likely to fail"
-- Transaction reverts
-
----
-
-## If It Still Fails
-
-Try these in order:
-
-1. **Change to Approach 3:**
-   - In `swapSelector.ts`: `CURRENT_APPROACH = 'approach-3'`
-   - Or in `useSwap.ts`: Change `false` to `true`
-
-2. **Try different fee tier:**
-   - Edit token pool to use 0.3% fee (most common)
-
-3. **Try different network:**
-   - Switch to Ethereum Mainnet
-   - V4 might not be fully live on all networks
-
-4. **Check console logs:**
-   - Look for error messages
-   - Verify encoded data
-
----
-
-## Need More Details?
-
-Read these files in order:
-1. `COMPREHENSIVE_SOLUTION.md` - Full explanation
-2. `TESTING_GUIDE.md` - Step-by-step testing
-3. `SOLUTION_APPROACHES.md` - Technical details
-
----
-
-## Files You Got
-
-### Documentation
-- `COMPREHENSIVE_SOLUTION.md` - Complete guide (read this first!)
-- `TESTING_GUIDE.md` - Testing instructions
-- `SOLUTION_APPROACHES.md` - Technical explanations
-- `QUICK_FIX.md` - This file (2-min fix)
-
-### Implementation
-- `singleHopSwap_v2.ts` - Approaches 1 & 3 ⭐
-- `singleHopSwap_v3.ts` - Approaches 4 & 5
-- `swapSelector.ts` - Easy switcher
-
-### Reference
-- `SWAP_ENCODING_FIX.md` - Your original notes (updated)
-
----
+## Files that Matter
+- `src/lib/uniswap/singleHopSwap.ts` – direct encoding implementation
+- `src/hooks/useSwap.ts` – orchestrates approvals + sends the prepared transaction
+- `src/components/SwapForm.tsx` – UI + explorer links
 
 ## One-Liner Summary
-
-**The problem:** Wrong parameter encoding for SETTLE_ALL and TAKE_ALL
-**The fix:** Use direct ABI encoding instead of RoutePlanner SDK
-**Test it:** Change import to `swapSelector` and set `CURRENT_APPROACH = 'approach-1'`
+Swaps succeed because we manually encode `SWAP_EXACT_IN_SINGLE → SETTLE_ALL → TAKE_ALL` and call the Universal Router with the right commands for every network.

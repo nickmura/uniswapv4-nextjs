@@ -6,7 +6,7 @@ import { getQuoterAddress, QUOTER_ABI } from '../config/contracts';
 import { createPoolKey } from './poolUtils';
 import { calculateMinAmountOut } from '../utils/slippage';
 import { formatTokenAmount, calculatePrice } from '../utils/formatting';
-import { mainnet, sepolia, base, arbitrum } from 'viem/chains';
+import { mainnet, sepolia, base, arbitrum, optimism } from 'viem/chains';
 
 // Get chain object from chain ID
 function getChainFromId(chainId: number) {
@@ -15,6 +15,7 @@ function getChainFromId(chainId: number) {
     case 11155111: return sepolia;
     case 8453: return base;
     case 42161: return arbitrum;
+    case 10: return optimism;
     default: return mainnet;
   }
 }

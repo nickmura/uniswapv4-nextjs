@@ -207,6 +207,12 @@ export function getCommonIntermediateTokens(chainId: number): string[] {
         '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // WETH
         '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC
       ];
+    case 10: // Optimism
+      return [
+        '0x4200000000000000000000000000000000000006', // WETH
+        '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', // USDC
+        '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', // USDT
+      ];
     case 8453: // Base
       return [
         '0x4200000000000000000000000000000000000006', // WETH

@@ -32,6 +32,15 @@ export const BASE_CONTRACTS: UniswapContracts = {
   permit2: getAddress('0x000000000022D473030F116dDEE9F6B43aC78BA3'),
 };
 
+// Optimism Mainnet (Chain ID: 10)
+export const OPTIMISM_CONTRACTS: UniswapContracts = {
+  poolManager: getAddress('0x9a13f98cb987694c9f086b1f5eb990eea8264ec3'),
+  quoter: getAddress('0x1f3131a13296fb91c90870043742c3cdbff1a8d7'),
+  stateView: getAddress('0xc18a3169788f4f75a170290584eca6395c75ecdb'),
+  universalRouter: getAddress('0x851116d9223fabed8e56c0e6b8ad0c31d98b3507'),
+  permit2: getAddress('0x000000000022D473030F116dDEE9F6B43aC78BA3'),
+};
+
 // Arbitrum One (Chain ID: 42161)
 export const ARBITRUM_CONTRACTS: UniswapContracts = {
   poolManager: getAddress('0x360e68faccca8ca495c1b759fd9eee466db9fb32'),
@@ -52,6 +61,8 @@ export function getContractsByChainId(chainId: number): UniswapContracts {
       return BASE_CONTRACTS;
     case 42161:
       return ARBITRUM_CONTRACTS;
+    case 10:
+      return OPTIMISM_CONTRACTS;
     default:
       throw new Error(`Unsupported chain ID: ${chainId}`);
   }
@@ -167,6 +178,22 @@ export const ERC20_ABI = [
     name: 'balanceOf',
     outputs: [{ name: '', type: 'uint256' }],
     stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+// Permit2 ABI (minimal)
+export const PERMIT2_ABI = [
+  {
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint160' },
+      { name: 'expiration', type: 'uint48' },
+    ],
+    name: 'approve',
+    outputs: [],
+    stateMutability: 'nonpayable',
     type: 'function',
   },
 ] as const;

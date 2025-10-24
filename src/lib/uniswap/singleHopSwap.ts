@@ -1,5 +1,6 @@
 import { SingleHopSwapParams } from '@/types/swap';
-import { Address, encodeFunctionData, encodeAbiParameters, parseAbiParameters } from 'viem';
+import { Address, encodeFunctionData } from 'viem';
+import { V4Planner, Actions } from '@uniswap/v4-sdk';
 import { createPoolKey, getZeroForOne, getPoolTokenAddress } from './poolUtils';
 import { getUniversalRouterAddress, UNIVERSAL_ROUTER_ABI } from '../config/contracts';
 import { isNativeToken } from '../config/tokens';
@@ -17,7 +18,7 @@ const V4_SWAP_COMMAND = 0x10;
 function encodeV4SwapActions(
   params: SingleHopSwapParams
 ): { commands: `0x${string}`; inputs: `0x${string}`[] } {
-  const { tokenIn, tokenOut, amountIn, minAmountOut } = params;
+  const { tokenIn, tokenOut, amountIn, minAmountOut, recipient } = params;
 
   // Create pool key
   const poolKey = createPoolKey(tokenIn, tokenOut);
@@ -68,62 +69,39 @@ function encodeV4SwapActions(
   console.log('AmountIn:', amountIn.toString());
   console.log('MinAmountOut:', minAmountOut.toString());
   if (wantsNativeOut) {
-    console.log('Native ETH requested as output. TAKE_ALL will deliver native ETH directly.');
+    console.log('Native ETH requested as output.');
   }
 
-  // Build V4 actions bytes - concatenate action IDs
-  const actionIds = [
-    V4_SWAP_EXACT_IN_SINGLE,
-    V4_SETTLE_ALL,
-    V4_TAKE_ALL,
-  ];
-  const actionsBytes = `0x${actionIds.map((id) => id.toString(16).padStart(2, '0')).join('')}` as `0x${string}`;
+  // Build V4 actions using the official planner utilities
+  const planner = new V4Planner();
 
-  // Build parameters array for each action
-  const paramsArray: `0x${string}`[] = [];
-
-  // Action 1: SWAP_EXACT_IN_SINGLE - ExactInputSingleParams struct
-  const swapParams = encodeAbiParameters(
-    parseAbiParameters('(address,address,uint24,int24,address),bool,uint128,uint128,bytes'),
-    [
-      [poolKeyCurrency0, poolKeyCurrency1, poolKey.fee, poolKey.tickSpacing, poolKey.hooks],
+  planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [
+    {
+      poolKey: {
+        currency0: poolKeyCurrency0,
+        currency1: poolKeyCurrency1,
+        fee: poolKey.fee,
+        tickSpacing: poolKey.tickSpacing,
+        hooks: poolKey.hooks,
+      },
       zeroForOne,
-      amountIn,
-      minAmountOut,
-      '0x',
-    ]
-  );
-  paramsArray.push(swapParams);
+      amountIn: amountIn.toString(),
+      amountOutMinimum: minAmountOut.toString(),
+      hookData: '0x',
+    },
+  ]);
 
-  // Action 2: SETTLE_ALL - settle input currency
-  const settleParams = encodeAbiParameters(
-    parseAbiParameters('address,uint256'),
-    [currencyIn, amountIn]
-  );
-  paramsArray.push(settleParams);
+  planner.addAction(Actions.SETTLE, [currencyIn, amountIn.toString(), true]);
+  planner.addAction(Actions.TAKE, [takeCurrency, recipient, '0']);
 
-  // Action 3: TAKE_ALL - collect output currency
-  const takeParams = encodeAbiParameters(
-    parseAbiParameters('address,uint256'),
-    [takeCurrency, minAmountOut]
-  );
-  paramsArray.push(takeParams);
-
-  // Encode the V4 command input (bytes actions, bytes[] params)
-  const v4Input = encodeAbiParameters(
-    parseAbiParameters('bytes,bytes[]'),
-    [actionsBytes, paramsArray]
-  );
-
+  const v4Input = planner.finalize() as `0x${string}`;
   const commands = `0x${V4_SWAP_COMMAND.toString(16).padStart(2, '0')}` as `0x${string}`;
-  const inputs = [v4Input] as `0x${string}`[];
+  const inputs: `0x${string}`[] = [v4Input];
 
   console.log('=== V4 Manual Encoding ===');
-  console.log('Actions:', actionsBytes);
-  console.log('Action sequence:', actionIds.map((id) => `0x${id.toString(16).padStart(2, '0')}`).join(' -> '));
-  console.log('Params array length:', paramsArray.length);
+  console.log('Action sequence:', 'SWAP_EXACT_IN_SINGLE -> SETTLE -> TAKE');
   console.log('Commands:', commands);
-  console.log('Expected Commands: 0x10 (V4_SWAP)');
+  console.log('Inputs length:', inputs.length);
 
   return { commands, inputs };
 }

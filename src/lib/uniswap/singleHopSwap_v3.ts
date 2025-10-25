@@ -1,3 +1,17 @@
+/**
+ * @file singleHopSwap_v3.ts
+ * @deprecated This file contains experimental implementations and is kept for reference only.
+ *
+ * DO NOT USE THIS FILE IN PRODUCTION CODE.
+ * Use ./singleHopSwap.ts instead, which uses the official @uniswap/v4-sdk.
+ *
+ * This file was created during debugging to test different action types:
+ * - Approach 4: Using SETTLE + TAKE (with explicit amounts and recipient)
+ * - Approach 5: Simplified SETTLE_ALL + TAKE_ALL with minimal parameters
+ *
+ * Both approaches were replaced by the SDK-based implementation in singleHopSwap.ts
+ */
+
 import { SingleHopSwapParams } from '@/types/swap';
 import { Address, encodeFunctionData, encodeAbiParameters, parseAbiParameters } from 'viem';
 import { createPoolKey, getZeroForOne, getPoolTokenAddress } from './poolUtils';
@@ -15,8 +29,6 @@ const V4_TAKE_ALL = 0x0f;
 const V4_SWAP = 0x10;
 
 // MSG_SENDER constant (for recipient)
-const MSG_SENDER = '0x0000000000000000000000000000000000000001';
-
 /**
  * APPROACH 4: Using SETTLE + TAKE instead of SETTLE_ALL + TAKE_ALL
  *

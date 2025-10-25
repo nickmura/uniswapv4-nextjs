@@ -41,7 +41,7 @@ export function parseTokenAmount(amount: string, decimals: number): bigint {
     }
 
     return parseUnits(cleanAmount, decimals);
-  } catch (error) {
+  } catch {
     return 0n;
   }
 }

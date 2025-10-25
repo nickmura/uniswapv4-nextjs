@@ -16,7 +16,7 @@ export function sortTokens(tokenA: Address, tokenB: Address): [Address, Address]
  * Determine if the swap is zeroForOne (selling currency0 for currency1)
  */
 export function getZeroForOne(tokenIn: Address, tokenOut: Address): boolean {
-  const [currency0, currency1] = sortTokens(tokenIn, tokenOut);
+  const [currency0] = sortTokens(tokenIn, tokenOut);
   return tokenIn.toLowerCase() === currency0.toLowerCase();
 }
 
@@ -142,6 +142,12 @@ export function createPoolKeysForAllFees(tokenIn: Token, tokenOut: Token): PoolK
 
 /**
  * Encode route path for multi-hop swap
+ * Based on official Uniswap V4 documentation
+ *
+ * Converts an array of tokens into PathKey[] format by:
+ * 1. Creating a pool key for each consecutive pair
+ * 2. Determining the output currency for each hop
+ * 3. Building PathKey with intermediateCurrency = output of that hop
  */
 export function encodeRoutePath(route: Token[], fees?: number[]): PathKey[] {
   if (route.length < 3) {
@@ -149,15 +155,46 @@ export function encodeRoutePath(route: Token[], fees?: number[]): PathKey[] {
   }
 
   const pathKeys: PathKey[] = [];
-  const defaultFees = fees || route.slice(1).map(() => FEE_AMOUNTS.MEDIUM);
+  const defaultFees = fees || route.slice(0, route.length - 1).map(() => FEE_AMOUNTS.MEDIUM);
 
-  // Create path keys for each intermediate token
-  for (let i = 1; i < route.length - 1; i++) {
-    pathKeys.push(createPathKey(route[i], defaultFees[i - 1]));
+  // Build pool keys for each hop
+  const poolKeys: PoolKey[] = [];
+  for (let i = 0; i < route.length - 1; i++) {
+    const fee = defaultFees[i] || FEE_AMOUNTS.MEDIUM;
+    poolKeys.push(createPoolKey(route[i], route[i + 1], fee));
   }
 
-  // Add final hop
-  pathKeys.push(createPathKey(route[route.length - 1], defaultFees[defaultFees.length - 1]));
+  // Start with the first token's address (convert ETH to WETH for pool keys)
+  let currentCurrencyIn = getPoolTokenAddress(route[0]);
+
+  // For each pool, determine the output currency
+  for (let i = 0; i < poolKeys.length; i++) {
+    const poolKey = poolKeys[i];
+
+    // Determine the output currency for this hop
+    const currencyOut = currentCurrencyIn.toLowerCase() === poolKey.currency0.toLowerCase()
+      ? poolKey.currency1
+      : poolKey.currency0;
+
+    // For V4, native ETH should be represented as address(0) in the path
+    // Check if the output token is native ETH
+    const outputToken = route[i + 1];
+    const pathCurrency = isNativeToken(outputToken.address)
+      ? '0x0000000000000000000000000000000000000000' as Address
+      : currencyOut;
+
+    // Create path key for this hop
+    const pathKey: PathKey = {
+      intermediateCurrency: pathCurrency,
+      fee: poolKey.fee,
+      tickSpacing: poolKey.tickSpacing,
+      hooks: poolKey.hooks,
+      hookData: '0x',
+    };
+
+    pathKeys.push(pathKey);
+    currentCurrencyIn = currencyOut; // Output becomes input for next hop (keep as WETH for pool matching)
+  }
 
   return pathKeys;
 }

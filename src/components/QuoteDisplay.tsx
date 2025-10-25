@@ -1,7 +1,7 @@
 'use client';
 
 import { QuoteResult } from '@/types/swap';
-import { formatPercentage, formatExchangeRate } from '@/lib/utils/formatting';
+import { formatPercentage } from '@/lib/utils/formatting';
 import { formatRoute } from '@/lib/uniswap/poolUtils';
 
 interface QuoteDisplayProps {

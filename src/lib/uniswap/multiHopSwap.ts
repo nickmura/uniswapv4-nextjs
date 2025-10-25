@@ -1,100 +1,235 @@
-import { MultiHopSwapParams } from '@/types/swap';
-import { Address, encodeFunctionData, encodeAbiParameters, parseAbiParameters } from 'viem';
-import { encodeRoutePath, getPoolTokenAddress, isValidRoute } from './poolUtils';
+import { MultiHopSwapParams, Token, PoolKey } from '@/types/swap';
+import { Address, encodeFunctionData, isAddress } from 'viem';
+import { V4Planner, Actions } from '@uniswap/v4-sdk';
+import { CommandType, RoutePlanner } from '@uniswap/universal-router-sdk';
+import { createPoolKey, getPoolTokenAddress, isValidRoute } from './poolUtils';
 import { getUniversalRouterAddress, UNIVERSAL_ROUTER_ABI } from '../config/contracts';
 import { isNativeToken } from '../config/tokens';
 
-import { RoutePlanner, CommandType } from '@uniswap/universal-router-sdk';
-
-// CORRECT V4 Action Constants from v4-periphery contract
-// From: https://github.com/Uniswap/v4-periphery/blob/main/src/libraries/Actions.sol
-const V4_SWAP_EXACT_IN = 0x07;  // Multi-hop exact input
-const V4_SETTLE_ALL = 0x0c;      // Settle input currency
-const V4_TAKE_ALL = 0x0f;        // Take output currency
+// Debug mode - set NEXT_PUBLIC_DEBUG_SWAPS=true in .env to enable detailed logs
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG_SWAPS === 'true' || true; // Temporarily enabled for debugging
 
 /**
- * Encode V4 Planner actions for multi-hop swap
+ * Get V4 currency address
+ * Native ETH is represented as address(0) in V4, not WETH
  */
-function encodeV4MultiHopActions(params: MultiHopSwapParams): { commands: `0x${string}`; inputs: `0x${string}`[] } {
-  const { route, amountIn, minAmountOut } = params;
+function getV4Currency(token: Token): Address {
+  if (isNativeToken(token.address)) {
+    return '0x0000000000000000000000000000000000000000';
+  }
+  return getPoolTokenAddress(token);
+}
 
+/**
+ * Encode multi-hop exact input path
+ *
+ * Based on official Uniswap V4 documentation:
+ * Converts an array of PoolKeys into PathKey[] format required for multi-hop swaps
+ *
+ * @param poolKeys - Array of pool keys representing each hop in the route
+ * @param currencyIn - Starting currency address
+ * @param route - Full token route (used to check if output tokens are native ETH)
+ * @returns Array of PathKey objects for the multi-hop path
+ */
+export function encodeMultihopExactInPath(
+  poolKeys: PoolKey[],
+  currencyIn: Address,
+  route: Token[]
+): Array<{
+  intermediateCurrency: Address;
+  fee: number;
+  tickSpacing: number;
+  hooks: Address;
+  hookData: `0x${string}`;
+}> {
+  const pathKeys: Array<{
+    intermediateCurrency: Address;
+    fee: number;
+    tickSpacing: number;
+    hooks: Address;
+    hookData: `0x${string}`;
+  }> = [];
+
+  let currentCurrencyIn = currencyIn;
+
+  for (let i = 0; i < poolKeys.length; i++) {
+    // Determine the output currency for this hop
+    const currencyOut = currentCurrencyIn.toLowerCase() === poolKeys[i].currency0.toLowerCase()
+      ? poolKeys[i].currency1
+      : poolKeys[i].currency0;
+
+    // Check if the output token (route[i + 1]) is native ETH
+    // If so, use address(0) instead of the pool currency
+    const outputToken = route[i + 1];
+    const pathCurrency = isNativeToken(outputToken.address)
+      ? ('0x0000000000000000000000000000000000000000' as Address)
+      : currencyOut;
+
+    // Create path key for this hop
+    const pathKey = {
+      intermediateCurrency: pathCurrency,
+      fee: poolKeys[i].fee,
+      tickSpacing: poolKeys[i].tickSpacing,
+      hooks: poolKeys[i].hooks,
+      hookData: '0x' as `0x${string}`,
+    };
+
+    pathKeys.push(pathKey);
+    currentCurrencyIn = currencyOut; // Keep using pool currency for next hop matching (WETH, not address(0))
+  }
+
+  return pathKeys;
+}
+
+/**
+ * Encode V4 multi-hop swap actions using the official V4 SDK Planner
+ *
+ * V4 Multi-Hop Swap Action Sequence:
+ * 1. SWAP_EXACT_IN - Execute multi-hop swap through multiple pools
+ * 2. SETTLE_ALL - Pay the input tokens from user to PoolManager
+ * 3. TAKE_ALL - Withdraw output tokens from PoolManager to recipient
+ *
+ * @param params - Multi-hop swap parameters
+ * @returns Encoded commands and inputs for Universal Router
+ */
+function encodeV4MultiHopActions(
+  params: MultiHopSwapParams
+): { commands: `0x${string}`; inputs: `0x${string}`[] } {
+  const { route, amountIn, minAmountOut, recipient } = params;
+
+  // Validate recipient address format
+  if (!isAddress(recipient)) {
+    throw new Error(`Invalid recipient address: ${recipient}`);
+  }
+
+  // Validate route
   if (!isValidRoute(route)) {
-    throw new Error('Invalid route');
+    throw new Error('Invalid route: tokens must be on same chain and adjacent tokens must be different');
+  }
+
+  if (route.length < 3) {
+    throw new Error('Multi-hop route must have at least 3 tokens');
   }
 
   const tokenIn = route[0];
   const tokenOut = route[route.length - 1];
 
-  // Get exact currency (first token in route)
-  const exactCurrency = getPoolTokenAddress(tokenIn);
+  // Build pool keys for each hop
+  const poolKeys: PoolKey[] = [];
+  for (let i = 0; i < route.length - 1; i++) {
+    const poolKey = createPoolKey(route[i], route[i + 1]);
 
-  // Encode the path
-  const pathKeys = encodeRoutePath(route);
+    // For V4, if either token is native ETH, replace WETH with address(0) in pool key
+    const token0 = route[i];
+    const token1 = route[i + 1];
 
-  // Build V4 actions bytes - concatenate action IDs
-  const actionsBytes = `0x${V4_SWAP_EXACT_IN.toString(16).padStart(2, '0')}${V4_SETTLE_ALL.toString(16).padStart(2, '0')}${V4_TAKE_ALL.toString(16).padStart(2, '0')}` as `0x${string}`;
+    const poolKeyCurrency0 =
+      (isNativeToken(token0.address) && poolKey.currency0 === getPoolTokenAddress(token0)) ||
+      (isNativeToken(token1.address) && poolKey.currency0 === getPoolTokenAddress(token1))
+        ? '0x0000000000000000000000000000000000000000'
+        : poolKey.currency0;
 
-  // Build parameters array for each action
-  const params_array: `0x${string}`[] = [];
+    const poolKeyCurrency1 =
+      (isNativeToken(token0.address) && poolKey.currency1 === getPoolTokenAddress(token0)) ||
+      (isNativeToken(token1.address) && poolKey.currency1 === getPoolTokenAddress(token1))
+        ? '0x0000000000000000000000000000000000000000'
+        : poolKey.currency1;
 
-  // Action 1: SWAP_EXACT_IN (multi-hop) - ExactInputParams struct
-  const swapParams = encodeAbiParameters(
-    parseAbiParameters('address,(address,uint24,int24,address,bytes)[],uint128,uint128'),
-    [
-      exactCurrency,
-      pathKeys.map(pk => [
-        pk.intermediateCurrency,
-        pk.fee,
-        pk.tickSpacing,
-        pk.hooks,
-        pk.hookData,
-      ] as const),
-      amountIn,
-      minAmountOut,
-    ]
-  );
-  params_array.push(swapParams);
+    // Create the final pool key with proper native ETH handling
+    poolKeys.push({
+      ...poolKey,
+      currency0: poolKeyCurrency0 as Address,
+      currency1: poolKeyCurrency1 as Address,
+    });
+  }
 
-  // Action 2: SETTLE_ALL - settle input currency
-  const tokenInAddress = getPoolTokenAddress(tokenIn);
-  const settleParams = encodeAbiParameters(
-    parseAbiParameters('address,uint256'),
-    [tokenInAddress, amountIn]
-  );
-  params_array.push(settleParams);
+  // Get currency addresses
+  const currencyIn = getV4Currency(tokenIn);
+  const currencyOut = getV4Currency(tokenOut);
 
-  // Action 3: TAKE_ALL - collect output currency
-  const tokenOutAddress = getPoolTokenAddress(tokenOut);
-  const takeParams = encodeAbiParameters(
-    parseAbiParameters('address,uint256'),
-    [tokenOutAddress, minAmountOut]
-  );
-  params_array.push(takeParams);
+  // Encode the multi-hop path
+  const path = encodeMultihopExactInPath(poolKeys, currencyIn, route);
 
-  // Create route planner and add V4_SWAP command
-  // CRITICAL: Pass actions and params as TWO SEPARATE arguments, not encoded together!
-  const planner = new RoutePlanner();
-  planner.addCommand(CommandType.V4_SWAP, [actionsBytes, params_array]);
+  if (DEBUG) {
+    console.log('=== V4 Multi-Hop Swap Config ===');
+    console.log('Route:', route.map(t => t.symbol).join(' → '));
+    console.log('Token In:', tokenIn.symbol, tokenIn.address, '(isNative:', isNativeToken(tokenIn.address), ')');
+    console.log('Token Out:', tokenOut.symbol, tokenOut.address, '(isNative:', isNativeToken(tokenOut.address), ')');
+    console.log('Currency In (for SETTLE_ALL):', currencyIn);
+    console.log('Currency Out (for TAKE_ALL):', currencyOut);
+    console.log('AmountIn:', amountIn.toString());
+    console.log('MinAmountOut:', minAmountOut.toString());
+    console.log('Number of hops:', poolKeys.length);
+    console.log('Pool Keys:');
+    poolKeys.forEach((pk, i) => {
+      console.log(`  Pool ${i}: ${pk.currency0} / ${pk.currency1}, fee: ${pk.fee}, tickSpacing: ${pk.tickSpacing}`);
+    });
+    console.log('Path Keys:');
+    path.forEach((pk, i) => {
+      console.log(`  Path ${i}: intermediateCurrency=${pk.intermediateCurrency}, fee=${pk.fee}, tickSpacing=${pk.tickSpacing}`);
+    });
+    console.log('Recipient:', recipient);
+  }
+
+  // Build V4 actions using the official V4Planner SDK
+  const v4Planner = new V4Planner();
+
+  // 1. Execute multi-hop swap
+  v4Planner.addAction(Actions.SWAP_EXACT_IN, [
+    {
+      currencyIn,
+      path,
+      amountIn: amountIn.toString(),
+      amountOutMinimum: minAmountOut.toString(),
+    },
+  ]);
+
+  // 2. Settle the input currency (pay tokens from user)
+  v4Planner.addAction(Actions.SETTLE_ALL, [currencyIn, amountIn.toString()]);
+
+  // 3. Take the output currency (receive tokens to recipient)
+  v4Planner.addAction(Actions.TAKE_ALL, [currencyOut, minAmountOut.toString()]);
+
+  // Finalize V4 planner to get encoded actions
+  const encodedActions = v4Planner.finalize() as `0x${string}`;
+
+  // Create Universal Router planner
+  const routePlanner = new RoutePlanner();
+
+  // Add V4_SWAP command with the encoded actions
+  routePlanner.addCommand(CommandType.V4_SWAP, [encodedActions]);
+
+  if (DEBUG) {
+    console.log('=== V4 Multi-Hop Encoding Complete ===');
+    console.log('Action sequence:', 'SWAP_EXACT_IN -> SETTLE_ALL -> TAKE_ALL');
+    console.log('Commands:', routePlanner.commands);
+    console.log('Inputs length:', routePlanner.inputs.length);
+  }
 
   return {
-    commands: planner.commands as `0x${string}`,
-    inputs: planner.inputs as `0x${string}`[],
+    commands: routePlanner.commands as `0x${string}`,
+    inputs: routePlanner.inputs as `0x${string}`[],
   };
 }
 
 /**
  * Prepare transaction data for multi-hop swap
+ *
+ * @param params - Multi-hop swap parameters
+ * @returns Transaction object ready to be sent via sendTransaction
  */
 export function prepareMultiHopSwap(params: MultiHopSwapParams): {
   to: Address;
   data: `0x${string}`;
   value: bigint;
 } {
-  const { route, amountIn, deadline, chainId } = params;
-
-  if (!isValidRoute(route)) {
-    throw new Error('Invalid route');
+  // Validate parameters before encoding
+  const validation = validateMultiHopSwapParams(params);
+  if (!validation.valid) {
+    throw new Error(`Invalid multi-hop swap parameters: ${validation.error}`);
   }
+
+  const { route, amountIn, deadline, chainId } = params;
 
   // Get Universal Router address
   const universalRouterAddress = getUniversalRouterAddress(chainId);
@@ -111,7 +246,17 @@ export function prepareMultiHopSwap(params: MultiHopSwapParams): {
 
   // Calculate value (only if swapping native ETH)
   const tokenIn = route[0];
-  const value = isNativeToken(tokenIn.address) ? amountIn : 0n;
+  const value = isNativeToken(tokenIn.address) ? amountIn : BigInt(0);
+
+  if (DEBUG) {
+    console.log('=== Universal Router Multi-Hop Transaction ===');
+    console.log('To:', universalRouterAddress);
+    console.log('Value:', value.toString(), 'wei');
+    console.log('Commands:', commands);
+    console.log('Inputs length:', inputs.length);
+    console.log('Deadline:', deadline.toString());
+    console.log('Data length:', data.length);
+  }
 
   return {
     to: universalRouterAddress,
@@ -122,8 +267,13 @@ export function prepareMultiHopSwap(params: MultiHopSwapParams): {
 
 /**
  * Execute a multi-hop swap
+ *
  * Note: This function prepares the transaction data.
- * Actual execution should be done via wagmi's useWriteContract hook
+ * Actual execution should be done via wagmi's sendTransaction hook.
+ *
+ * @param params - Multi-hop swap parameters
+ * @returns Transaction object ready to be sent
+ * @throws Error if parameters are invalid or encoding fails
  */
 export async function executeMultiHopSwap(params: MultiHopSwapParams): Promise<{
   to: Address;
@@ -131,54 +281,57 @@ export async function executeMultiHopSwap(params: MultiHopSwapParams): Promise<{
   value: bigint;
 }> {
   try {
-    // Validate parameters
-    const validation = validateMultiHopSwapParams(params);
-    if (!validation.valid) {
-      throw new Error(validation.error);
-    }
-
-    // Prepare transaction
+    // Prepare transaction (validation happens inside)
     const tx = prepareMultiHopSwap(params);
-
     return tx;
   } catch (error) {
-    console.error('Error executing multi-hop swap:', error);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to prepare multi-hop swap: ${errorMessage}`);
   }
 }
 
 /**
  * Estimate gas for multi-hop swap
+ *
+ * @deprecated Use wagmi's useEstimateGas hook instead for accurate gas estimation
+ * @returns Rough estimate of gas units needed (150k base + 80k per hop)
  */
 export async function estimateMultiHopSwapGas(params: MultiHopSwapParams): Promise<bigint> {
-  // Multi-hop swaps use more gas
-  // Estimate: 150k base + 80k per additional hop
+  // Multi-hop swaps use more gas than single-hop
+  // Base: 150k, Additional: ~80k per hop
   const hops = params.route.length - 1;
-  const estimatedGas = 150000n + BigInt(hops * 80000);
+  const estimatedGas = BigInt(150000 + hops * 80000);
   return estimatedGas;
 }
 
 /**
  * Validate multi-hop swap parameters
+ *
+ * @param params - Multi-hop swap parameters to validate
+ * @returns Validation result with error message if invalid
  */
 export function validateMultiHopSwapParams(params: MultiHopSwapParams): {
   valid: boolean;
   error?: string;
 } {
-  if (params.amountIn <= 0n) {
+  if (params.amountIn <= BigInt(0)) {
     return { valid: false, error: 'Amount in must be greater than 0' };
   }
 
-  if (params.minAmountOut < 0n) {
+  if (params.minAmountOut < BigInt(0)) {
     return { valid: false, error: 'Minimum amount out cannot be negative' };
   }
 
   if (params.route.length < 3) {
-    return { valid: false, error: 'Multi-hop route must have at least 3 tokens' };
+    return { valid: false, error: 'Multi-hop route must have at least 3 tokens (e.g., ETH → USDC → DAI)' };
   }
 
   if (!isValidRoute(params.route)) {
     return { valid: false, error: 'Invalid route: tokens must be on same chain and adjacent tokens must be different' };
+  }
+
+  if (!isAddress(params.recipient)) {
+    return { valid: false, error: 'Invalid recipient address' };
   }
 
   if (params.deadline <= BigInt(Math.floor(Date.now() / 1000))) {
@@ -189,11 +342,13 @@ export function validateMultiHopSwapParams(params: MultiHopSwapParams): {
 }
 
 /**
- * Find common intermediate tokens for routing
- * (e.g., WETH, USDC, USDT are common intermediate tokens)
+ * Get common intermediate tokens for routing on a specific chain
+ * These tokens typically have deep liquidity and can be used to route between other tokens
+ *
+ * @param chainId - Chain ID to get intermediate tokens for
+ * @returns Array of common token addresses (WETH, USDC, USDT, DAI, etc.)
  */
-export function getCommonIntermediateTokens(chainId: number): string[] {
-  // These are common tokens used as intermediates for routing
+export function getCommonIntermediateTokens(chainId: number): Address[] {
   switch (chainId) {
     case 1: // Mainnet
       return [
@@ -231,28 +386,31 @@ export function getCommonIntermediateTokens(chainId: number): string[] {
 
 /**
  * Suggest a multi-hop route between two tokens
+ * Attempts to find a path through common intermediate tokens (WETH, USDC, etc.)
+ *
+ * @param tokenInAddress - Input token address
+ * @param tokenOutAddress - Output token address
+ * @param chainId - Chain ID
+ * @returns Suggested route as array of token addresses
  */
 export async function suggestRoute(
   tokenInAddress: Address,
   tokenOutAddress: Address,
   chainId: number
 ): Promise<Address[]> {
-  // If tokens are directly connected, return direct route
-  // For now, try common intermediate tokens
-
   const intermediates = getCommonIntermediateTokens(chainId);
 
-  // Try each intermediate token
+  // Try each intermediate token to find a valid route
   for (const intermediate of intermediates) {
     if (
       intermediate.toLowerCase() !== tokenInAddress.toLowerCase() &&
       intermediate.toLowerCase() !== tokenOutAddress.toLowerCase()
     ) {
       // Return route through this intermediate
-      return [tokenInAddress, intermediate as Address, tokenOutAddress];
+      return [tokenInAddress, intermediate, tokenOutAddress];
     }
   }
 
-  // Default: return direct route
+  // Default: return direct route (will use single-hop)
   return [tokenInAddress, tokenOutAddress];
 }

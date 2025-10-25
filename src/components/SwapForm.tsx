@@ -32,10 +32,10 @@ export function SwapForm() {
   });
   const [showSlippageSettings, setShowSlippageSettings] = useState(false);
 
-  // Swap type
+  // Swap type toggle
   const [swapType, setSwapType] = useState<SwapType>(SwapType.SINGLE_HOP);
 
-  // Multi-hop route (if applicable)
+  // Multi-hop route
   const [route, setRoute] = useState<Token[]>([]);
 
   // Get token balances
@@ -69,9 +69,34 @@ export function SwapForm() {
   // Update route when tokens change
   useEffect(() => {
     if (tokenIn && tokenOut) {
-      setRoute([tokenIn, tokenOut]);
+      if (swapType === SwapType.MULTI_HOP) {
+        // For multi-hop, we need at least 3 tokens
+        // Try to find a common intermediate token (e.g., WETH, USDC)
+        const tokens = getTokensByChainId(chainId || 1);
+
+        // Prefer WETH as intermediate if available and not already in route
+        const wethToken = Object.values(tokens).find(t => t.symbol === 'WETH');
+        if (wethToken &&
+            wethToken.address.toLowerCase() !== tokenIn.address.toLowerCase() &&
+            wethToken.address.toLowerCase() !== tokenOut.address.toLowerCase()) {
+          setRoute([tokenIn, wethToken, tokenOut]);
+        } else {
+          // If WETH is one of the tokens, try USDC
+          const usdcToken = Object.values(tokens).find(t => t.symbol === 'USDC');
+          if (usdcToken &&
+              usdcToken.address.toLowerCase() !== tokenIn.address.toLowerCase() &&
+              usdcToken.address.toLowerCase() !== tokenOut.address.toLowerCase()) {
+            setRoute([tokenIn, usdcToken, tokenOut]);
+          } else {
+            // Fallback to direct route (will switch to single-hop)
+            setRoute([tokenIn, tokenOut]);
+          }
+        }
+      } else {
+        setRoute([tokenIn, tokenOut]);
+      }
     }
-  }, [tokenIn, tokenOut]);
+  }, [tokenIn, tokenOut, swapType, chainId]);
 
   // Handle amount input
   const handleAmountChange = (value: string) => {
@@ -184,6 +209,77 @@ export function SwapForm() {
         </button>
       </div>
 
+      {/* Swap Type Toggle */}
+      <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+        <label className="text-sm font-medium mb-2 block">Swap Type</label>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setSwapType(SwapType.SINGLE_HOP)}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+              swapType === SwapType.SINGLE_HOP
+                ? 'bg-blue-500 text-white'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            Single Hop
+          </button>
+          <button
+            onClick={() => setSwapType(SwapType.MULTI_HOP)}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+              swapType === SwapType.MULTI_HOP
+                ? 'bg-blue-500 text-white'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            Multi-Hop
+          </button>
+        </div>
+        {swapType === SwapType.MULTI_HOP && (
+          <>
+            {route.length >= 3 && (
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="text-xs font-medium text-blue-900 dark:text-blue-200 mb-1">Route:</div>
+                <div className="text-sm flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                  {route.map((token, i) => (
+                    <span key={i} className="flex items-center gap-2">
+                      <span className="font-medium">{token.symbol}</span>
+                      {i < route.length - 1 && <span className="text-blue-400">→</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <div className="text-xs text-yellow-800 dark:text-yellow-200">
+                ⚠️ <strong>Note:</strong> Multi-hop swaps require pools for each hop in the route.
+                {(() => {
+                  const networkStatus = getNetworkStatus(chainId || 1);
+                  if (networkStatus?.poolsAvailable === 'none') {
+                    return (
+                      <div className="mt-1 font-semibold">
+                        {networkStatus.name} has NO V4 pools. Please switch to Ethereum Mainnet.
+                      </div>
+                    );
+                  }
+                  if (networkStatus?.poolsAvailable === 'limited') {
+                    return (
+                      <div className="mt-1">
+                        {networkStatus.name} has limited pools. If quoting fails, try single-hop mode or switch to Mainnet.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="mt-1">
+                      If quoting fails, try single-hop mode or switch to Ethereum Mainnet.
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Slippage Settings */}
       {showSlippageSettings && (
         <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -293,9 +389,9 @@ export function SwapForm() {
       <div className="mt-4">
         {!account ? (
           <ConnectButton.Custom>
-            {({ show }) => (
+            {({ openConnectModal }) => (
               <button
-                onClick={show}
+                onClick={openConnectModal}
                 className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-colors"
               >
                 Connect Wallet

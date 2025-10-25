@@ -58,6 +58,11 @@ export function useSwapQuote(params: UseSwapQuoteParams) {
 
       if (swapType === SwapType.MULTI_HOP && route && route.length >= 3) {
         // Multi-hop quote
+        console.log('[useSwapQuote] Fetching multi-hop quote:', {
+          route: route.map(t => t.symbol).join(' → '),
+          amountIn: debouncedAmountIn,
+          chainId,
+        });
         quoteResult = await getMultiHopQuote({
           route,
           tokenIn,
@@ -68,6 +73,12 @@ export function useSwapQuote(params: UseSwapQuoteParams) {
         });
       } else {
         // Single-hop quote - uses getBestQuote to try multiple fee tiers
+        console.log('[useSwapQuote] Fetching single-hop quote:', {
+          tokenIn: tokenIn.symbol,
+          tokenOut: tokenOut.symbol,
+          amountIn: debouncedAmountIn,
+          chainId,
+        });
         quoteResult = await getBestQuote({
           tokenIn,
           tokenOut,
@@ -78,6 +89,7 @@ export function useSwapQuote(params: UseSwapQuoteParams) {
       }
 
       setQuote(quoteResult);
+      console.log('[useSwapQuote] Quote fetched successfully');
     } catch (err) {
       console.error('Error fetching quote:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch quote'));

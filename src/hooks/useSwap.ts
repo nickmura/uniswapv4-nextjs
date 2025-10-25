@@ -2,13 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { Token, SwapType } from '@/types/swap';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSendTransaction } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSendTransaction } from 'wagmi';
 import { Address } from 'viem';
 import { executeSingleHopSwap } from '@/lib/uniswap/singleHopSwap';
 import { executeMultiHopSwap } from '@/lib/uniswap/multiHopSwap';
 import { calculateDeadline } from '@/lib/utils/slippage';
-import { isNativeToken, getWETHAddress } from '@/lib/config/tokens';
-import { getPermit2Address, getUniversalRouterAddress, ERC20_ABI, PERMIT2_ABI, UNIVERSAL_ROUTER_ABI } from '@/lib/config/contracts';
+import { isNativeToken } from '@/lib/config/tokens';
+import { getPermit2Address, getUniversalRouterAddress, ERC20_ABI, PERMIT2_ABI } from '@/lib/config/contracts';
 
 interface UseSwapParams {
   tokenIn: Token | null;
@@ -38,7 +38,7 @@ export function useSwap() {
    * Check if token needs approval
    */
   const checkApproval = useCallback(
-    async (token: Token, amount: bigint): Promise<boolean> => {
+    async (token: Token): Promise<boolean> => {
       if (!account) return false;
 
       // Native ETH doesn't need approval
@@ -48,8 +48,6 @@ export function useSwap() {
 
       try {
         // Check current allowance for Permit2
-        const permit2Address = getPermit2Address(token.chainId);
-
         // Use a public client to read the allowance
         // Note: This is a simplified version. In production, you'd use useReadContract
         // For now, we'll assume approval is needed and handle it in the swap flow
@@ -79,8 +77,8 @@ export function useSwap() {
       try {
         const permit2Address = getPermit2Address(token.chainId);
         const universalRouterAddress = getUniversalRouterAddress(chainId);
-        const maxPermitAmount = (1n << 160n) - 1n;
-        const expirationSeconds = BigInt(Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365); // ~1 year
+        const maxPermitAmount = BigInt((BigInt(1) << BigInt(160)) - BigInt(1));
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365; // ~1 year
 
         // Approve Permit2 to spend tokens
         const approveTx = await writeContractAsync({
@@ -97,7 +95,7 @@ export function useSwap() {
           address: permit2Address,
           abi: PERMIT2_ABI,
           functionName: 'approve',
-          args: [token.address, universalRouterAddress, maxPermitAmount, expirationSeconds],
+          args: [token.address, universalRouterAddress, maxPermitAmount, expirationTimestamp],
         });
 
         console.log('Permit2 approval transaction sent:', permitTx);
@@ -131,7 +129,7 @@ export function useSwap() {
           throw new Error('Please select tokens');
         }
 
-        if (amountIn <= 0n) {
+        if (amountIn <= BigInt(0)) {
           throw new Error('Please enter an amount');
         }
 
@@ -144,7 +142,7 @@ export function useSwap() {
 
         // Check and approve token if needed (skip for native ETH)
         if (!isNativeToken(tokenIn.address)) {
-          const hasApproval = await checkApproval(tokenIn, amountIn);
+          const hasApproval = await checkApproval(tokenIn);
           if (!hasApproval) {
             // Request approval
             await approveToken(tokenIn, amountIn, chainId);

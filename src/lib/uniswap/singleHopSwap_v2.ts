@@ -1,3 +1,17 @@
+/**
+ * @file singleHopSwap_v2.ts
+ * @deprecated This file contains experimental implementations and is kept for reference only.
+ *
+ * DO NOT USE THIS FILE IN PRODUCTION CODE.
+ * Use ./singleHopSwap.ts instead, which uses the official @uniswap/v4-sdk.
+ *
+ * This file was created during debugging to test different encoding approaches:
+ * - Approach 1: Direct ABI encoding (manual parameter encoding)
+ * - Approach 3: Using CONTRACT_BALANCE constant for SETTLE/TAKE
+ *
+ * Both approaches were replaced by the SDK-based implementation in singleHopSwap.ts
+ */
+
 import { SingleHopSwapParams } from '@/types/swap';
 import { Address, encodeFunctionData, encodeAbiParameters, parseAbiParameters } from 'viem';
 import { createPoolKey, getZeroForOne, getPoolTokenAddress } from './poolUtils';
@@ -12,8 +26,7 @@ const V4_TAKE_ALL = 0x0f;
 // Universal Router Command
 const V4_SWAP = 0x10;
 
-// Special constant for using contract balance / open delta 
-//@ts-ignore sybau
+// Special constant for using contract balance / open delta
 const CONTRACT_BALANCE = 0x8000000000000000000000000000000000000000000000000000000000000000n;
 
 /**
@@ -314,7 +327,7 @@ export async function executeSingleHopSwap(
 /**
  * Estimate gas for single-hop swap
  */
-export async function estimateSingleHopSwapGas(_params: SingleHopSwapParams): Promise<bigint> {
+export async function estimateSingleHopSwapGas(): Promise<bigint> {
   // V4 swaps typically use 150k-200k gas
   return BigInt(180000);
 }

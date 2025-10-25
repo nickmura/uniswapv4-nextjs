@@ -1,5 +1,4 @@
-import { Token as SDKToken, CurrencyAmount } from '@uniswap/sdk-core';
-import { Pool, Route, Trade } from '@uniswap/v4-sdk';
+import { Token as SDKToken } from '@uniswap/sdk-core';
 import { QuoteParams, QuoteResult, Token } from '@/types/swap';
 import { createPublicClient, http } from 'viem';
 import { getQuoterAddress, QUOTER_ABI } from '../config/contracts';
@@ -39,13 +38,8 @@ export async function getSingleHopQuoteWithSDK(params: QuoteParams): Promise<Quo
   const { tokenIn, tokenOut, amountIn, slippage = 0.5, chainId } = params;
 
   try {
-    // Convert to SDK tokens
-    const sdkTokenIn = toSDKToken(tokenIn);
-    const sdkTokenOut = toSDKToken(tokenOut);
-
-    // Create currency amount
-    const currencyAmount = CurrencyAmount.fromRawAmount(sdkTokenIn, amountIn.toString());
-
+    // Validate tokens
+    toSDKToken(tokenIn);
     // Create pool key for quoter call
     const poolKey = createPoolKey(tokenIn, tokenOut);
 
@@ -109,8 +103,9 @@ export async function getSingleHopQuoteWithSDK(params: QuoteParams): Promise<Quo
       executionPrice,
       gasEstimate,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message?: string };
     console.error('Quote error:', error);
-    throw new Error(`Failed to get quote: ${error.message || 'Unknown error'}`);
+    throw new Error(`Failed to get quote: ${err.message || 'Unknown error'}`);
   }
 }

@@ -1,5 +1,5 @@
-import { QuoteParams, QuoteResult, PoolKey, PathKey } from '@/types/swap';
-import { createPublicClient, http, Address, formatUnits } from 'viem';
+import { QuoteParams, QuoteResult, Token } from '@/types/swap';
+import { createPublicClient, http } from 'viem';
 import { getQuoterAddress, QUOTER_ABI } from '../config/contracts';
 import { createPoolKey, getZeroForOne, encodeRoutePath, getPoolTokenAddress } from './poolUtils';
 import { calculateMinAmountOut } from '../utils/slippage';
@@ -105,26 +105,28 @@ export async function getSingleHopQuote(params: QuoteParams): Promise<QuoteResul
         executionPrice,
         gasEstimate,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { message?: string };
       console.error('Quote error details:', error);
 
-      // Provide more specific error messages
-      if (error.message?.includes('returned no data') || error.message?.includes('"0x"')) {
+      const message = err.message ?? '';
+
+      if (message.includes('returned no data') || message.includes('"0x"')) {
         throw new Error(
           `Pool does not exist for ${tokenIn.symbol}/${tokenOut.symbol} with ${poolKey.fee / 10000}% fee. ` +
           `Uniswap V4 is newly deployed - pools may be limited. Try a different token pair or fee tier.`
         );
       }
 
-      if (error.message?.includes('revert') || error.message?.includes('execution reverted')) {
+      if (message.includes('revert') || message.includes('execution reverted')) {
         throw new Error('Pool does not exist for this token pair. Try a different fee tier or token pair.');
       }
 
-      if (error.message?.includes('does not have the function')) {
+      if (message.includes('does not have the function')) {
         throw new Error('Contract error: Quoter contract may not be correctly deployed. Please verify contract addresses.');
       }
 
-      throw new Error(`Failed to get quote: ${error.message || 'Unknown error'}`);
+      throw new Error(`Failed to get quote: ${message || 'Unknown error'}`);
     }
   } catch (error) {
     console.error('Error getting single-hop quote:', error);
@@ -146,11 +148,39 @@ export async function getMultiHopQuote(params: QuoteParams & { route: typeof par
     const tokenIn = route[0];
     const tokenOut = route[route.length - 1];
 
+    console.log('[Multi-Hop Quote] Attempting route:', route.map(t => t.symbol).join(' → '));
+    console.log('[Multi-Hop Quote] Amount in:', amountIn.toString());
+    console.log('[Multi-Hop Quote] Chain ID:', chainId);
+
+    // Check network status
+    const networkStatus = getNetworkStatus(chainId);
+    if (networkStatus) {
+      console.log('[Multi-Hop Quote] Network:', networkStatus.name);
+      console.log('[Multi-Hop Quote] Pool availability:', networkStatus.poolsAvailable);
+
+      if (networkStatus.poolsAvailable === 'none') {
+        throw new Error(
+          `${networkStatus.name} has NO V4 pools. Multi-hop swaps are not available. ` +
+          `Please switch to Ethereum Mainnet or use single-hop mode.`
+        );
+      }
+
+      if (networkStatus.poolsAvailable === 'limited') {
+        console.warn('[Multi-Hop Quote] Warning: Limited pool availability on this network');
+      }
+    }
+
     // Create path keys for the route
     const pathKeys = encodeRoutePath(route);
+    console.log('[Multi-Hop Quote] Path keys created:', pathKeys.length, 'hops');
+    console.log('[Multi-Hop Quote] PathKeys detail:');
+    pathKeys.forEach((pk, i) => {
+      console.log(`  Hop ${i}: intermediateCurrency=${pk.intermediateCurrency}, fee=${pk.fee}, tickSpacing=${pk.tickSpacing}`);
+    });
 
     // Get the first token address for exactCurrency
     const exactCurrency = getPoolTokenAddress(tokenIn);
+    console.log('[Multi-Hop Quote] Exact currency (tokenIn):', exactCurrency);
 
     // Create public client
     const chain = getChainFromId(chainId);
@@ -171,7 +201,13 @@ export async function getMultiHopQuote(params: QuoteParams & { route: typeof par
         args: [
           {
             exactCurrency,
-            path: pathKeys,
+            path: pathKeys as readonly {
+              intermediateCurrency: `0x${string}`;
+              fee: number;
+              tickSpacing: number;
+              hooks: `0x${string}`;
+              hookData: `0x${string}`;
+            }[],
             exactAmount: amountIn,
           },
         ],
@@ -203,9 +239,26 @@ export async function getMultiHopQuote(params: QuoteParams & { route: typeof par
         executionPrice,
         gasEstimate,
       };
-    } catch (error: any) {
-      console.error('Multi-hop quote error:', error);
-      throw new Error('Failed to get multi-hop quote. Route may not exist or have insufficient liquidity.');
+    } catch (error: unknown) {
+      console.error('[Multi-Hop Quote] Contract call failed:', error);
+      const routeStr = route.map(t => t.symbol).join(' → ');
+
+      // Check which pool is missing
+      console.log('[Multi-Hop Quote] Validating route pools...');
+      const validation = await validateMultiHopRoute(route, chainId);
+
+      if (!validation.valid && validation.missingPool) {
+        throw new Error(
+          `Multi-hop failed: Pool ${validation.missingPool} does not exist. ` +
+          `Try a different route or use single-hop mode.`
+        );
+      }
+
+      throw new Error(
+        `Multi-hop quote failed for route: ${routeStr}. ` +
+        `The pools may not exist on this network, or there may be insufficient liquidity. ` +
+        `Try single-hop mode or a different network.`
+      );
     }
   } catch (error) {
     console.error('Error getting multi-hop quote:', error);
@@ -229,9 +282,7 @@ export async function getBestQuote(params: QuoteParams): Promise<QuoteResult> {
     { fee: 100, tickSpacing: 1 },     // 0.01% - very stable
   ];
 
-  const errors: string[] = [];
-
-  for (const { fee, tickSpacing } of feeTiers) {
+  for (const { fee } of feeTiers) {
     try {
       // Create pool key with this fee tier
       const poolKey = createPoolKey(tokenIn, tokenOut, fee);
@@ -290,8 +341,8 @@ export async function getBestQuote(params: QuoteParams): Promise<QuoteResult> {
           gasEstimate,
         };
       }
-    } catch (error: any) {
-      errors.push(`${fee / 10000}%: ${error.message}`);
+    } catch (error: unknown) {
+      console.debug(`Fee tier ${fee / 10000}% quote failed`, error);
       // Continue to next fee tier
       continue;
     }
@@ -316,8 +367,8 @@ export async function getBestQuote(params: QuoteParams): Promise<QuoteResult> {
  * Check if a direct pool exists for a token pair
  */
 export async function hasDirectPool(
-  tokenIn: typeof import('@/types/swap').Token,
-  tokenOut: typeof import('@/types/swap').Token,
+  tokenIn: Token,
+  tokenOut: Token,
   chainId: number
 ): Promise<boolean> {
   try {
@@ -332,4 +383,30 @@ export async function hasDirectPool(
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if all pools in a multi-hop route exist
+ * @returns Object with exists flag and missing pool info if any
+ */
+export async function validateMultiHopRoute(
+  route: Token[],
+  chainId: number
+): Promise<{ valid: boolean; missingPool?: string }> {
+  if (route.length < 3) {
+    return { valid: false, missingPool: 'Route must have at least 3 tokens' };
+  }
+
+  // Check each consecutive pair
+  for (let i = 0; i < route.length - 1; i++) {
+    const hasPool = await hasDirectPool(route[i], route[i + 1], chainId);
+    if (!hasPool) {
+      return {
+        valid: false,
+        missingPool: `${route[i].symbol}/${route[i + 1].symbol}`,
+      };
+    }
+  }
+
+  return { valid: true };
 }

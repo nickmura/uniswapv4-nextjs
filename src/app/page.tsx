@@ -23,7 +23,7 @@ export default function Home() {
               Swap Tokens on Uniswap V4
             </h2>
             <p className="text-gray-600 dark:text-gray-400 text-lg">
-              Trade any token with the power of Uniswap V4's advanced features
+              Trade any token with the power of Uniswap V4&rsquo;s advanced features
             </p>
           </div>
 

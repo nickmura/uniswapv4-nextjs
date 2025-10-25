@@ -1,5 +1,3 @@
-import { Currency } from '@uniswap/sdk-core';
-import { SwapExactInSingle, SwapExactIn } from '@uniswap/v4-sdk';
 import { Address } from 'viem';
 
 export interface Token {

@@ -114,7 +114,7 @@ interface TokenRowProps {
 }
 
 function TokenRow({ token, onSelect }: TokenRowProps) {
-  const { balance, formatted } = useTokenBalance(token);
+  const { formatted } = useTokenBalance(token);
 
   return (
     <button
